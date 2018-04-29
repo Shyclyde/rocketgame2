@@ -2,15 +2,19 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
 public class Rocket : MonoBehaviour {
 
     Rigidbody rigidBody;
     AudioSource rocketSound;
+    Text godModeText;
 
-    enum State { Alive, Dying, Transcending }
-    State state = State.Alive;
+    bool isTranscending = false;
+    bool godmode = false;
+
+    Vector3 thrust = new Vector3(0, 10, 0);
 
     [SerializeField] float rcsThrust = 100f;
     [SerializeField] float mainThrust = 100f;
@@ -25,22 +29,38 @@ public class Rocket : MonoBehaviour {
 
     [SerializeField] float levelLoadDelay = 2f;
 
-    Vector3 thrust = new Vector3(0, 10, 0);
-
     void Start () {
         rigidBody = GetComponent<Rigidbody>();
         rocketSound = GetComponent<AudioSource>();
+        godModeText = GameObject.Find("Godmode Value").GetComponent<Text>();
 	}
 	
 	void Update () {
-        if(state == State.Alive) {
+        if (!isTranscending) {
             RespondToThrustInput();
             RespondToRotateInput();
         }
-	}
+        if(Debug.isDebugBuild)
+            RespondToDebugKeys();
+    }
+
+    private void RespondToDebugKeys() {
+        //toggle godmode
+        if (Input.GetKeyDown(KeyCode.C)) {
+            godmode = !godmode;
+            if (godmode == false)
+                godModeText.text = "off";
+            else if (godmode == true)
+                godModeText.text = "on";
+        }
+        //load next level
+        if (Input.GetKeyDown(KeyCode.L)) {
+            LoadNextScene();
+        }
+    }
 
     private void OnCollisionEnter(Collision collision) {
-        if (state != State.Alive) return; //ignore when dead
+        if (isTranscending || godmode) return; //ignore when dead
 
         switch (collision.gameObject.tag) {
             case "Friendly":
@@ -52,15 +72,14 @@ public class Rocket : MonoBehaviour {
             case "Finish":
                 Win();
                 break;
-            default:               
+            default:
                 Die();
                 break;
         }
     }
 
     private void Win() {
-        print("Won");
-        state = State.Transcending;
+        isTranscending = true;
         rocketSound.Stop();
         rocketSound.PlayOneShot(winSound);
         winParticles.Play();
@@ -68,8 +87,7 @@ public class Rocket : MonoBehaviour {
     }
 
     private void Die() {
-        print("Dead");
-        state = State.Dying;
+        isTranscending = true;
         rocketSound.Stop();
         rocketSound.PlayOneShot(deathSound);
         mainEngineParticles.Stop();
@@ -78,15 +96,15 @@ public class Rocket : MonoBehaviour {
     }
 
     private void LoadNextScene() {
-        state = State.Alive;
-        SceneManager.LoadScene(1);
+        isTranscending = false;
+        int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+        int nextSceneIndex = currentSceneIndex + 1;
+        if (nextSceneIndex == SceneManager.sceneCountInBuildSettings)
+            nextSceneIndex = 0;
+        SceneManager.LoadScene(nextSceneIndex);
     }
 
     private void Respawn() {
-        state = State.Alive;
-        mainEngineParticles.Stop();
-        winParticles.Stop();
-        deathParticles.Stop();
         SceneManager.LoadScene(0);
     }
 
@@ -95,9 +113,13 @@ public class Rocket : MonoBehaviour {
             ApplyThrust();
         }
         else if (Input.GetKeyUp(KeyCode.Space)) {
-            rocketSound.Stop();
-            mainEngineParticles.Stop();
+            StopApplyingThrust();
         }
+    }
+
+    private void StopApplyingThrust() {
+        rocketSound.Stop();
+        mainEngineParticles.Stop();
     }
 
     private void ApplyThrust() {
@@ -108,16 +130,13 @@ public class Rocket : MonoBehaviour {
     }
 
     private void RespondToRotateInput() {
-        rigidBody.freezeRotation = true; // stop the physical rotation so we can just turn it
-
+        rigidBody.angularVelocity = Vector3.zero; // stop current motion
         float rotationThisFrame = rcsThrust * Time.deltaTime;
-        if (Input.GetKey(KeyCode.A)) {
-            
+
+        if (Input.GetKey(KeyCode.A)) 
             transform.Rotate(Vector3.forward * rotationThisFrame);
-        }
-        else if (Input.GetKey(KeyCode.D)) {
+
+        else if (Input.GetKey(KeyCode.D))
             transform.Rotate(-Vector3.forward * rotationThisFrame);
-        }
-        rigidBody.freezeRotation = false; // resume the normal physics rotation
     }
 }
